@@ -4,13 +4,11 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { exec } from "child_process";
+import axios from "axios";
+import jwt from "jsonwebtoken";
 import paperRoutes from "./routes/paperRoutes.js";
 import User from "./models/User.js"; // Import User model
-import jwt from 'jsonwebtoken';
 
-
-
-// Load environment variables
 dotenv.config();
 
 // MongoDB Connection
@@ -38,34 +36,21 @@ app.use(express.json());
 // Routes
 app.use("/api/papers", paperRoutes);
 
-// Signup Route
-app.post("/signup", async (req, res) => {
+// 📌 **New Route: Fetch Research Papers from Flask Scraper**
+app.get("/api/scholar-papers", async (req, res) => {
+  const query = req.query.query || "deep learning"; // Default query
   try {
-    const { name, email, phone, place, password } = req.body;
-
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: "User already exists" });
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create new user
-    const newUser = new User({ name, email, phone, place, password: hashedPassword });
-    await newUser.save();
-
-    res.status(201).json({ message: "Signup successful!" });
+    const response = await axios.get(`http://127.0.0.1:5001/scrape?query=${query}`);
+    res.json(response.data);
   } catch (error) {
-    console.error("Signup Error:", error);
-    res.status(500).json({ message: "Internal Server Error" });
+    console.error("Error fetching research papers:", error.message);
+    res.status(500).json({ message: "Server Error" });
   }
 });
 
-// API to fetch research papers from Google Scholar
+// 📌 **API to Fetch Research Papers Using Python Scraper**
 app.get("/api/scholar", (req, res) => {
-  const query = req.query.query || "machine learning"; // Default query
+  const query = req.query.query || "machine learning";
 
   exec(`python3 scraper.py "${query}"`, (error, stdout, stderr) => {
     if (error) {
@@ -84,34 +69,52 @@ app.get("/api/scholar", (req, res) => {
   });
 });
 
-app.post("/signin", async (req, res) => {
-    const { email, password } = req.body;
-  
-    try {
-      // Check if user exists
-      const user = await User.findOne({ email });
-      if (!user) return res.status(400).json({ message: "Invalid email or password" });
-  
-      // Compare passwords
-      const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch) return res.status(400).json({ message: "Invalid email or password" });
-  
-      // 🔍 Debugging: Check if JWT_SECRET is loaded
-      console.log("JWT_SECRET:", process.env.JWT_SECRET);
-  
-      // Generate JWT token
-      const payload = { userId: user._id };  // Define payload properly
-      const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
-  
-      res.status(200).json({ message: "Login successful!", token });
-    } catch (error) {
-      console.error("Signin Error:", error);
-      res.status(500).json({ message: "Something went wrong", error: error.message });
-    }
-  });
-  
+// 📌 **Signup Route**
+app.post("/signup", async (req, res) => {
+  try {
+    const { name, email, phone, place, password } = req.body;
 
-  
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.status(400).json({ message: "User already exists" });
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create new user
+    const newUser = new User({ name, email, phone, place, password: hashedPassword });
+    await newUser.save();
+
+    res.status(201).json({ message: "Signup successful!" });
+  } catch (error) {
+    console.error("Signup Error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// 📌 **Signin Route**
+app.post("/signin", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    // Check if user exists
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ message: "Invalid email or password" });
+
+    // Compare passwords
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).json({ message: "Invalid email or password" });
+
+    // Generate JWT token
+    const payload = { userId: user._id };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1h" });
+
+    res.status(200).json({ message: "Login successful!", token });
+  } catch (error) {
+    console.error("Signin Error:", error);
+    res.status(500).json({ message: "Something went wrong", error: error.message });
+  }
+});
 
 // Start Server
 const PORT = process.env.PORT || 5000;

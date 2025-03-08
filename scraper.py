@@ -1,15 +1,28 @@
 from flask import Flask, jsonify, request
-from scraper import scrape_data  # Your existing scraping function
 from flask_cors import CORS
+from sel import scrape_google_scholar  # Import your scraper
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for frontend
+CORS(app)
 
-@app.route('/scrape', methods=['GET'])
-def get_scraped_data():
-    query = request.args.get('query', 'deep learning')  # Get query from request
-    data = scrape_data(query)  # Scrape based on the query
-    return jsonify(data)
+@app.route('/api/papers', methods=['GET'])
+def get_papers():
+    try:
+        query = request.args.get('query', '')
+        print(f"📢 Received query: {query}")  # Debugging
 
-if __name__ == '__main__':
-    app.run(debug=True)
+        if not query:
+            return jsonify({"error": "Query parameter is required"}), 400
+
+        # Test if function works inside API
+        papers = scrape_google_scholar(query)
+        print(f"✅ Scraped Papers: {papers}")  # Debugging
+
+        return jsonify({"dbPapers": [], "scrapedPapers": papers})
+
+    except Exception as e:
+        print(f"❌ Server Error: {str(e)}")  # Log error
+        return jsonify({"message": "Server Error"}), 500
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
