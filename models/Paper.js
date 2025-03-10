@@ -1,13 +1,12 @@
 import mongoose from "mongoose";
 
-const paperSchema = mongoose.Schema(
-  {
-    title: { type: String, required: true },
-    author: { type: String, required: true },
-    abstract: { type: String, required: true },
-  },
-  { timestamps: true }
-);
+const PaperSchema = new mongoose.Schema({
+  title: { type: String, required: true, unique: true },
+  link: { type: String, required: true },
+  snippet: { type: String },
+  authors: { type: String, default: "Unknown" },
+});
 
-const Paper = mongoose.model("Paper", paperSchema);
+const Paper = mongoose.model("Paper", PaperSchema);
+
 export default Paper;

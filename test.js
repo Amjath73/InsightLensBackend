@@ -8,7 +8,6 @@ import axios from "axios";
 import jwt from "jsonwebtoken";
 import paperRoutes from "./routes/paperRoutes.js";
 import User from "./models/User.js"; // Import User model
-import Paper from "./models/Paper.js"; // Import Paper model
 
 dotenv.config();
 
@@ -37,37 +36,19 @@ app.use(express.json());
 // Routes
 app.use("/api/papers", paperRoutes);
 
-// 📌 **Fetch & Store Research Papers in MongoDB**
+// 📌 **New Route: Fetch Research Papers from Flask Scraper**
 app.get("/api/scholar-papers", async (req, res) => {
   const query = req.query.query || "deep learning"; // Default query
-
   try {
-    const response = await axios.get(`http://127.0.0.1:5000/api/papers?query=${query}`);
-
-    const papers = response.data.map((paper) => ({
-      title: paper.title,
-      link: paper.link,
-      snippet: paper.snippet,
-      authors: paper.authors || "Unknown",
-    }));
-
-    console.log("Fetched Papers:", papers);
-    console.log("Saved to MongoDB:", savedPapers);
-
-
-    // Insert into MongoDB (Prevent duplicates using upsert)
-    await Paper.insertMany(papers, { ordered: false }).catch((err) => {
-      console.log("⚠️ Some duplicates skipped:", err.message);
-    });
-
-    res.json(papers);
+    const response = await axios.get(`http://127.0.0.1:5001/scrape?query=${query}`);
+    res.json(response.data);
   } catch (error) {
     console.error("Error fetching research papers:", error.message);
     res.status(500).json({ message: "Server Error" });
   }
 });
 
-// 📌 **Fetch Research Papers Using Python Scraper**
+// 📌 **API to Fetch Research Papers Using Python Scraper**
 app.get("/api/scholar", (req, res) => {
   const query = req.query.query || "machine learning";
 
