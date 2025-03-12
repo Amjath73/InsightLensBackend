@@ -18,7 +18,6 @@ def get_papers():
         papers = fetch_top_research_papers(query)  # Fetch papers from all sources
         print(f"✅ Scraped Papers: {papers}")  # Debugging
 
-        # Convert to JSON serializable format
         return jsonify({"dbPapers": [], "scrapedPapers": json.loads(json.dumps(papers))})
 
     except Exception as e:
@@ -26,4 +25,4 @@ def get_papers():
         return jsonify({"message": "Server Error", "error": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5001)
