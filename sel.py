@@ -291,11 +291,12 @@ def fetch_top_research_papers(query):
             seen_titles.add(normalized_title)
             unique_papers.append(paper)
     
-    # Sort by relevance score and recency
+    # Sort by year first (recent to old), then by relevance score
+    current_year = datetime.now().year
     sorted_papers = sorted(
         unique_papers,
-        key=lambda x: (x.get('relevance_score', 0), x.get('year', 0) or 0),
-        reverse=True
+        key=lambda x: (-(x.get('year', 0) or 0), x.get('relevance_score', 0)),
+        reverse=False
     )
     
     return sorted_papers[:15]
