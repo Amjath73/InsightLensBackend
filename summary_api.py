@@ -18,7 +18,7 @@ def get_summary():
             return jsonify({"error": "No text provided"}), 400
 
         # Summarize text (set min/max length based on your needs)
-        summary = summarizer(text, max_length=150, min_length=50, do_sample=False)
+        summary = summarizer(text, max_length=500, min_length=150, do_sample=False)
 
         return jsonify({"summary": summary[0]["summary_text"]})
     except Exception as e:

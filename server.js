@@ -2,9 +2,13 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
+import http from 'http';
+import { Server as SocketIO } from 'socket.io';
 import bcrypt from "bcryptjs";
+import path from 'path';
 import { exec } from "child_process";
 import axios from "axios";
+import cookieParser from 'cookie-parser';
 import jwt from "jsonwebtoken";
 import paperRoutes from "./routes/paperRoutes.js";
 import User from "./models/User.js"; // Import User model
@@ -39,9 +43,30 @@ app.use("/api/papers", paperRoutes);
 
 // 📌 **Fetch & Store Research Papers in MongoDB**
 app.get("/api/scholar-papers", async (req, res) => {
-  const query = req.query.query || "deep learning"; // Default query
+  const query = req.query.query;
+  const token = req.headers.authorization?.split(" ")[1]; // Extract token
+
+  if (!query) {
+    return res.status(400).json({ message: "Search query is required" });
+  }
 
   try {
+    let userId = null;
+    if (token) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      userId = decoded.userId;
+
+      // ✅ Store search query in search history (limit to 10 queries)
+      await User.findByIdAndUpdate(
+        userId,
+        { 
+          $push: { searchHistory: { $each: [query], $slice: -10 } } // Keep last 10 searches
+        },
+        { new: true }
+      );
+    }
+
+    // ✅ Fetch papers from Python scraper
     const response = await axios.get(`http://127.0.0.1:5000/api/papers?query=${query}`);
 
     const papers = response.data.map((paper) => ({
@@ -51,11 +76,7 @@ app.get("/api/scholar-papers", async (req, res) => {
       authors: paper.authors || "Unknown",
     }));
 
-    console.log("Fetched Papers:", papers);
-    console.log("Saved to MongoDB:", savedPapers);
-
-
-    // Insert into MongoDB (Prevent duplicates using upsert)
+    // Insert into MongoDB (Prevent duplicates)
     await Paper.insertMany(papers, { ordered: false }).catch((err) => {
       console.log("⚠️ Some duplicates skipped:", err.message);
     });
@@ -66,6 +87,7 @@ app.get("/api/scholar-papers", async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 });
+
 
 // 📌 **Fetch Research Papers Using Python Scraper**
 app.get("/api/scholar", (req, res) => {
@@ -133,6 +155,61 @@ app.post("/signin", async (req, res) => {
   } catch (error) {
     console.error("Signin Error:", error);
     res.status(500).json({ message: "Something went wrong", error: error.message });
+  }
+});
+
+// 📌 **Fetch All Users**
+app.get("/api/users", async (req, res) => {
+  try {
+    const users = await User.find({}, "name email place phone");
+    res.json(users);
+  } catch (error) {
+    console.error("Error fetching users:", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+app.get("/api/user/search-history", async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1]; // Extract token
+
+  try {
+    if (!token) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.userId).select("searchHistory");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json(user.searchHistory);
+  } catch (error) {
+    console.error("Error fetching search history:", error.message);
+    res.status(500).json({ message: "Server Error" });
+  }
+});
+
+app.get("/api/user/search-history", async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.userId).select("searchHistory");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json(user.searchHistory);
+  } catch (error) {
+    console.error("Error fetching search history:", error.message);
+    res.status(500).json({ message: "Server Error" });
   }
 });
 
