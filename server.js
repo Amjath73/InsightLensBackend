@@ -268,6 +268,56 @@ app.delete('/api/groups/:groupId', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/groups', authenticateToken, async (req, res) => {
+  try {
+    const groups = await Group.find()
+      .populate('creator', 'name')
+      .populate('members', 'name')
+      .sort({ createdAt: -1 });
+    res.json(groups);
+  } catch (error) {
+    console.error('Error fetching groups:', error);
+    res.status(500).json({ message: 'Error fetching groups' });
+  }
+});
+
+app.get('/api/groups/joined', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const groups = await Group.find({
+      members: userId
+    })
+    .populate('creator', 'name')
+    .populate('members', 'name')
+    .sort({ createdAt: -1 });
+
+    res.json(groups);
+  } catch (error) {
+    console.error('Error fetching joined groups:', error);
+    res.status(500).json({ message: 'Error fetching joined groups' });
+  }
+});
+
+app.post('/api/groups/:groupId/join', authenticateToken, async (req, res) => {
+  try {
+    const group = await Group.findById(req.params.groupId);
+    
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found' });
+    }
+
+    if (!group.members.includes(req.user.userId)) {
+      group.members.push(req.user.userId);
+      await group.save();
+    }
+
+    res.json({ message: 'Successfully joined group' });
+  } catch (error) {
+    console.error('Error joining group:', error);
+    res.status(500).json({ message: 'Error joining group' });
+  }
+});
+
 // Socket.IO event handlers
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
