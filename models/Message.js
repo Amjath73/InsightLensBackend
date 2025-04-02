@@ -22,9 +22,22 @@ const messageSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Pre-save middleware to ensure timestamp is set
+messageSchema.pre('save', function(next) {
+  if (!this.timestamp) {
+    this.timestamp = new Date();
+  }
+  next();
+});
+
 // Virtual for formatted timestamp
 messageSchema.virtual('formattedTimestamp').get(function() {
   return new Date(this.timestamp).toLocaleString();
+});
+
+// Pre-find middleware to populate sender
+messageSchema.pre(['find', 'findOne'], function() {
+  this.populate('sender', 'name');
 });
 
 const Message = mongoose.model('Message', messageSchema);

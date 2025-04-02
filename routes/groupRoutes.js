@@ -1,24 +1,26 @@
 import express from 'express';
 import Group from '../models/Group.js';
-import { authenticateToken } from '../middleware/auth.js';
+import Message from '../models/Message.js';
+import auth from '../middleware/auth.js';
 
 const router = express.Router();
 
-router.get('/', authenticateToken, async (req, res) => {
+// Get all groups
+router.get('/', auth, async (req, res) => {
   try {
-    console.log("GET /groups called");
     const groups = await Group.find()
-      .populate('creator', 'name email')
-      .populate('members', 'name email');
-    console.log("Found groups:", groups);
+      .populate('creator', 'name')
+      .populate('members', 'name')
+      .exec();
     res.json(groups);
   } catch (error) {
-    console.error('Error fetching groups:', error);
-    res.status(500).json({ message: error.message });
+    console.error("Error fetching groups:", error);
+    res.status(500).json({ message: "Error fetching groups", error: error.message });
   }
 });
 
-router.post('/', authenticateToken, async (req, res) => {
+// Create new group
+router.post('/', auth, async (req, res) => {
   try {
     const newGroup = new Group({
       name: req.body.name,
@@ -27,64 +29,104 @@ router.post('/', authenticateToken, async (req, res) => {
     });
     
     const savedGroup = await newGroup.save();
-    res.status(201).json(savedGroup);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-router.post('/:id/join', authenticateToken, async (req, res) => {
-  try {
-    console.log('Join attempt by user:', req.user.userId);
+    const populatedGroup = await Group.findById(savedGroup._id)
+      .populate('creator', 'name')
+      .populate('members', 'name');
     
-    const group = await Group.findById(req.params.id);
-    if (!group) {
-      return res.status(404).json({ message: 'Group not found' });
-    }
-
-    // Check if user is already a member
-    if (group.members.includes(req.user.userId)) {
-      console.log('User already a member');
-      const populatedGroup = await Group.findById(group._id)
-        .populate('creator', 'name email')
-        .populate('members', 'name email');
-      return res.json(populatedGroup);
-    }
-
-    // Add member using findByIdAndUpdate to avoid validation issues
-    const updatedGroup = await Group.findByIdAndUpdate(
-      req.params.id,
-      { $addToSet: { members: req.user.userId } },
-      { new: true }
-    ).populate('creator', 'name email')
-      .populate('members', 'name email');
-
-    if (!updatedGroup) {
-      return res.status(404).json({ message: 'Group not found' });
-    }
-
-    console.log('Successfully joined group:', updatedGroup);
-    res.json(updatedGroup);
+    res.status(201).json(populatedGroup);
   } catch (error) {
-    console.error('Error joining group:', error);
-    res.status(500).json({ message: error.message });
+    console.error("Error creating group:", error);
+    res.status(500).json({ message: "Error creating group", error: error.message });
   }
 });
 
-router.get('/:id', authenticateToken, async (req, res) => {
+// Join group - MUST be before the generic groupId routes
+router.post('/:groupId/join', auth, async (req, res) => {
+  console.log('hi')
   try {
-    const group = await Group.findById(req.params.id)
-      .populate('creator', 'name email')
-      .populate('members', 'name email');
-      
+    console.log('Join request received:', {
+      groupId: req.params.groupId,
+      userId: req.user.id || req.user.userId
+    });
+
+    const group = await Group.findById(req.params.groupId);
     if (!group) {
-      return res.status(404).json({ message: 'Group not found' });
+      console.log('Group not found:', req.params.groupId);
+      return res.status(404).json({ message: "Group not found" });
+    }
+
+    const userId = req.user.id || req.user.userId;
+    
+    // Check if user is already a member
+    if (group.members.includes(userId)) {
+      console.log('User already a member');
+      return res.status(200).json(await group.populate('members', 'name'));
+    }
+
+    // Add user to members array
+    group.members.push(userId);
+    await group.save();
+
+    const updatedGroup = await Group.findById(group._id)
+      .populate('creator', 'name')
+      .populate('members', 'name');
+
+    console.log('User joined successfully:', updatedGroup);
+    res.status(200).json(updatedGroup);
+  } catch (error) {
+    console.error("Error joining group:", error);
+    res.status(500).json({ message: "Error joining group", error: error.message });
+  }
+});
+
+// Get group messages
+router.get('/:groupId/messages', auth, async (req, res) => {
+  try {
+    const messages = await Message.find({ group: req.params.groupId })
+      .populate('sender', 'name')
+      .sort({ createdAt: 1 });
+    res.json(messages);
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    res.status(500).json({ message: 'Error fetching messages' });
+  }
+});
+
+// Post message to group
+router.post('/:groupId/messages', auth, async (req, res) => {
+  try {
+    const message = new Message({
+      content: req.body.content,
+      sender: req.user.userId,
+      group: req.params.groupId
+    });
+
+    await message.save();
+    const populatedMessage = await Message.findById(message._id)
+      .populate('sender', 'name');
+
+    res.status(201).json(populatedMessage);
+  } catch (error) {
+    console.error('Error creating message:', error);
+    res.status(500).json({ message: 'Error creating message' });
+  }
+});
+
+// Get single group - Keep this last
+router.get('/:groupId', auth, async (req, res) => {
+  try {
+    const group = await Group.findById(req.params.groupId)
+      .populate('creator', 'name')
+      .populate('members', 'name');
+    
+    if (!group) {
+      return res.status(404).json({ message: "Group not found" });
     }
     
     res.json(group);
   } catch (error) {
-    console.error('Error fetching group:', error);
-    res.status(500).json({ message: error.message });
+    console.error("Error fetching group:", error);
+    res.status(500).json({ message: "Error fetching group details" });
   }
 });
 
